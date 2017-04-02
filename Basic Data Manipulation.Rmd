@@ -1,0 +1,98 @@
+---
+title: "Basic Data Manipulation"
+output: html_notebook
+---
+
+The data is in an Excel file here called refine.xlsx. Right away, you'll notice that the data set has a few issues:
+* There are four brands: Philips, Akzo, Van Houten and Unilever. However, there are many different spellings and capitalizations of those names!
+* The product code and number are combined in one column, separated by a hyphen.
+
+```{r Library load, message=FALSE, warning=FALSE, include=FALSE}
+install.packages("stringdist")
+library("stringdist")
+install.packages("dplyr")
+library("dplyr")
+install.packages("tidyr")
+library("tidyr")
+install.packages("dummies")
+library("dummies")
+```
+
+```{r Load the data in RStudio, message=FALSE, warning=FALSE, include=FALSE}
+dfOriginal <- read.csv("refine_original.csv")
+df <- dfOriginal
+```
+
+Clean up the 'company' column so all of the misspellings of the brand names are standardized. For example, you can transform the values in the column to be: philips, akzo, van houten and unilever (all lowercase).
+
+```{r Clean up brand names, echo=TRUE, message=FALSE, warning=FALSE}
+# 1: Clean up brand names
+# closeMatch function will replace the observations in the vector 
+# with the closest match in the control vector
+closeMatch <- function(x, y) {
+  wt <- c()
+    for (i in 1:length(y)) {
+    wt[i] <- stringdist(x, y[i])
+    }
+  which.min(wt)
+  return(y[which.min(wt)])
+}
+brandName <- c( "philips", "akzo", "van houten",  "unilever")
+df$company <- sapply(df$company, closeMatch, y = brandName)
+df
+```
+
+Separate the product code and product number into separate columns i.e. add two new columns called product_code and product_number, containing the product code and number respectively
+
+```{r Separate product code and number, echo=TRUE, message=FALSE, warning=FALSE}
+# 2: Separate product code and number
+colnames(df)[which(names(df) == "Product.code...number")] <- "Productcode_number"
+df <- separate(df, Productcode_number, c("Productcode", "number"), sep = "-", remove = FALSE)
+df
+```
+You learn that the product codes actually represent the following product categories:
+p = Smartphone
+v = TV
+x = Laptop
+q = Tablet
+In order to make the data more readable, add a column with the product category for each record.
+
+```{r Add product categories, echo=TRUE, message=FALSE, warning=FALSE}
+# 3: Add product categories
+Productcode <- c("p", "v", "x", "q")
+Productcategory <- c("Smartphone", "TV", "Laptop", "Tablet")
+prodCatLookup <- data.frame(Productcode, Productcategory)
+df <- left_join(df, prodCatLookup)
+df
+```
+
+You'd like to view the customer information on a map. In order to do that, the addresses need to be in a form that can be easily geocoded. Create a new column full_address that concatenates the three address fields (address, city, country), separated by commas.
+
+```{r Add full address for geocoding, echo=TRUE, message=FALSE, warning=FALSE}
+# 4: Add full address for geocoding
+full_address <- paste(df$address, df$city, df$country, sep = ", ")
+df <- cbind(df, full_address)
+df
+```
+
+Both the company name and product category are categorical variables i.e. they take only a fixed set of values. In order to use them in further analysis you need to create dummy variables. Create dummy binary variables for each of them with the prefix company_ and product_ i.e.,
+* Add four binary (1 or 0) columns for company: company_philips, company_akzo, company_van_houten and company_unilever.
+* Add four binary (1 or 0) columns for product category: product_smartphone, product_tv, product_laptop and product_tablet.
+
+```{r Create dummy variables, echo=TRUE, message=FALSE, warning=FALSE}
+# 5: Create dummy variables for company and product category
+company <- gsub(" ", "_",df$company)
+df2 <- dummy(company, sep = "_")
+df <- cbind(df, df2)
+
+product <- tolower(df$Productcategory)
+df3 <- dummy(product, sep = "_")
+df <- cbind(df, df3)
+# View(df)
+```
+
+Save the output as a CSV file refine_original.csv
+
+```{r Save output, echo=TRUE, message=FALSE, warning=FALSE}
+write.csv(df, file = "refine_clean.csv")
+```
